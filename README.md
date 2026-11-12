@@ -1,1 +1,3 @@
 # qdesk
+
+Static notes page.
