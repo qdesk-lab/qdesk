@@ -144,6 +144,7 @@ summary{cursor:pointer;color:var(--muted);font-size:13px}
         <li><b>Model:</b> each team's offence and defence per quarter (recent games count more, only 40% of a team's own quarter pattern is kept because most of it is noise). If you enter the full-game total, the four quarters are scaled to add up to it. A quarter is a <b>BET</b> when the model gives it at least 55% to beat the line.</li>
         <li><b>Classic:</b> Henry's original method, unchanged: 3 H2H games + 2 games against a common opponent + season average, SD score (most consistent = 4) plus mean score (furthest from the line = 4). The highest total is the top pick.</li>
         <li><b>Final picks:</b> one per game, only where both methods point the same way. <b>Strong</b> = model BET and classic's top pick. <b>Good</b> = model BET and classic agrees. <b>Lean</b> = both agree, smaller edge.</li>
+        <li><b>Injury impact:</b> points per game of injured players. <b>NEW absences</b> played in the team's last 5 games, so the model's ratings still count them: the real total may be lower than the model thinks. <b>Already out</b> players have been missing for a while, so the ratings already reflect it. The book's game total includes all of this.</li>
         <li><b>Skipped games:</b> if the model's own full-game total is 8+ points away from the book's total, the book knows something (injuries, rest) and the game is left out. Check the injury report before betting.</li>
       </ul>
       <p class="sub">This is the public, read-only copy. It refreshes about every hour in the evening and after the morning grading. Predictions are statistical and for information only. No outcome is guaranteed. 18+. Bet only what you can afford to lose.</p>
@@ -239,13 +240,13 @@ function renderToday(){
   // keep anything typed but not yet saved when the page refreshes from the database
   const drafts={}; if(state.draftDate===s.date) document.querySelectorAll(".lines input").forEach(i=>drafts[i.id]=i.value);
   const focused=document.activeElement&&document.activeElement.id;
-  $("games").innerHTML=s.games.map(g=>gameCard(s.date,g,L[g.key],R[g.key],(s.notes||{})[g.key])).join("");
+  $("games").innerHTML=s.games.map(g=>gameCard(s.date,g,L[g.key],R[g.key],(s.notes||{})[g.key],(s.impact||{})[g.key])).join("");
   for(const [k,v] of Object.entries(drafts)){ const el=$(k); if(el) el.value=v; }
   if(focused&&$(focused)) $(focused).focus();
   state.draftDate=s.date;
   for(const g of s.games){ const b=$("save-"+g.key); if(b) b.onclick=()=>saveLines(s.date,g.key); }
 }
-function gameCard(date,g,ln,res,note){
+function gameCard(date,g,ln,res,note,impact){
   const a=analyse(g,ln); const id=g.key; const q=(ln&&ln.q)||[];
   const dis=state.canWrite?"":"disabled";
   const inp=(k,lab,val)=>`<label>${lab}<input id="${k}-${id}" inputmode="decimal" value="${val??""}" ${dis} autocomplete="off"></label>`;
@@ -262,7 +263,8 @@ function gameCard(date,g,ln,res,note){
   return `<article class="game"><div class="game-head"><h3>${esc(g.awayName)} <span class="at">@</span> ${esc(g.homeName)}</h3>
     <span class="sub">${esc(tipUK(g.tip))}</span>
     ${a.skip?`<span class="flag">Skipped: model total ${r1(a.rawSum)} vs book ${a.total} (gap ${r1(a.gap)})</span>`:""}</div>
-    ${note?`<div class="note" style="margin-bottom:12px"><b>Injury news:</b> ${esc(note)}</div>`:""}
+    ${impact?`<div class="note" style="margin-bottom:8px"><b>Injury impact:</b> ${esc(impact)}</div>`:""}
+    ${note?`<details style="margin:0 0 12px"><summary>Full injury list (ESPN)</summary><div class="note" style="margin-top:6px">${esc(note)}</div></details>`:""}
     <div class="lines">${inp("q1","Q1 line",q[0])}${inp("q2","Q2 line",q[1])}${inp("q3","Q3 line",q[2])}${inp("q4","Q4 line",q[3])}${inp("tot","Game total",ln&&ln.total)}
       <div class="savebox"><button class="save" id="save-${id}" type="button" ${dis}>Save lines</button><div class="saved" id="msg-${id}"></div></div></div>
     <div class="tbl"><table><thead><tr><th>Qtr</th><th>Line</th><th>Model proj</th><th>Edge</th><th>P(win)</th><th>Model</th><th>Verdict</th><th>Classic mean</th><th>SD</th><th>Score</th><th>Classic</th><th>Combined</th><th>Actual</th></tr></thead><tbody>${rows}</tbody></table></div>
