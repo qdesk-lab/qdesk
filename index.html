@@ -193,7 +193,7 @@ function finalPicks(date){
   const out=[];
   for(const g of s.games){
     const a=analyse(g,L[g.key]);
-    const best=a.qs.filter(x=>x.tier>0).sort((x,y)=>y.tier-x.tier||y.p-x.p)[0];
+    const best=a.qs.filter(x=>x.tier>0).sort((x,y)=>y.tier-x.tier||(y.cTop?1:0)-(x.cTop?1:0)||y.p-x.p)[0];
     if(best) out.push({g,q:best});
   }
   return out.sort((x,y)=>y.q.tier-x.q.tier||y.q.p-x.q.p);
