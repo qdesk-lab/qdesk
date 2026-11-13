@@ -100,6 +100,9 @@ summary{cursor:pointer;color:var(--muted);font-size:13px}
 .row.W{border-left-color:var(--win);background:var(--win-bg)} .row.L{border-left-color:var(--loss);background:var(--loss-bg)}
 .row .what{font-family:var(--f-display);font-size:18px;font-weight:600;min-width:0}
 .row .act{font-family:var(--f-mono);font-size:13px;color:var(--muted)}
+.bd{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:18px}
+.bd h3{font-size:18px;margin-bottom:6px}
+.bd td.lowN{color:var(--muted)}
 .how{max-width:68ch;display:grid;gap:12px;margin-top:20px}
 .how p,.how li{color:var(--ink)}
 .empty{padding:28px;text-align:center;color:var(--muted);background:var(--panel);border:1px dashed var(--line);border-radius:12px}
@@ -130,6 +133,7 @@ summary{cursor:pointer;color:var(--muted);font-size:13px}
   <section id="v-results" hidden>
     <div class="bar"><h2>Track record</h2><span class="sub">Graded automatically from about 6 a.m. the morning after (Lisbon/UK time).</span></div>
     <div class="tiles" id="tiles"></div>
+    <div id="breakdown"></div>
     <div id="days"></div>
   </section>
   <section id="v-how" hidden>
@@ -284,6 +288,7 @@ function renderResults(){
   const dates=Object.keys(state.slates).sort().reverse();
   const T={fin:[0,0,0,0],bet:[0,0,0,0],cls:[0,0,0,0]}; // W,L,P,units
   const add=(arr,r)=>{ if(!r) return; arr[r==="W"?0:r==="L"?1:2]++; arr[3]+= r==="W"?0.909:r==="L"?-1:0; };
+  const log=[]; const rec=(kind,qi,dir,r)=>{ if(r) log.push({kind,qi,dir,r}); };
   let html="";
   for(const d of dates){
     const s=state.slates[d], L=(state.lines[d]||{}).games||{}, R=(state.results[d]||{}).games||{};
@@ -291,14 +296,22 @@ function renderResults(){
     const fp=finalPicks(d);
     for(const g of s.games){ const a=analyse(g,L[g.key]); const act=R[g.key];
       for(const x of a.qs){ if(x.line===null||!act) continue;
-        if(x.verdict==="BET") add(T.bet,grade(x.mDir,x.line,act[x.i]));
-        if(x.cTop) add(T.cls,grade(x.cDir,x.line,act[x.i])); } }
-    const rows=fp.map(x=>{const act=(R[x.g.key]||[])[x.q.i]; const r=grade(x.q.mDir,x.q.line,act); add(T.fin,r);
+        if(x.verdict==="BET"){ const r=grade(x.mDir,x.line,act[x.i]); add(T.bet,r); rec("bet",x.i,x.mDir,r); }
+        if(x.cTop){ const r=grade(x.cDir,x.line,act[x.i]); add(T.cls,r); rec("cls",x.i,x.cDir,r); } } }
+    const rows=fp.map(x=>{const act=(R[x.g.key]||[])[x.q.i]; const r=grade(x.q.mDir,x.q.line,act); add(T.fin,r); rec("fin",x.q.i,x.q.mDir,r);
       return `<div class="row ${r||""}"><div class="what">${esc(pickText(x.g,x.q))} <span class="sub">· ${TIER[x.q.tier]}</span></div><span class="act">${act!==undefined?"actual "+act:"pending"}</span>${r?`<span class="res ${r}">${r==="W"?"WON":r==="L"?"LOST":"PUSH"}</span>`:"<span></span>"}</div>`}).join("");
     html+=`<div class="day"><h3>${slateLabel(d,true)}</h3><div class="rows">${rows||'<div class="sub">No game qualified.</div>'}</div></div>`;
   }
   const tile=(k,a,s)=>{const n=a[0]+a[1]; return `<div class="tile"><div class="k">${k}</div><div class="v">${a[0]}–${a[1]}${a[2]?"–"+a[2]:""}</div><div class="s">${n?Math.round(a[0]/n*1000)/10+"% · ":""}${a[3]>=0?"+":""}${a[3].toFixed(2)} units at −110 · ${s}</div></div>`};
   $("tiles").innerHTML=tile("Final picks",T.fin,"one per game")+tile("Model BET picks",T.bet,"every quarter rated BET")+tile("Classic top picks",T.cls,"top total per game")+`<div class="tile"><div class="k">Break-even</div><div class="v">52.4%</div><div class="s">needed at −110 odds. Judge after 150+ picks.</div></div>`;
+  const cell=(f)=>{const a=log.filter(f); const w=a.filter(x=>x.r==="W").length, l=a.filter(x=>x.r==="L").length, n=w+l;
+    return `<td class="${n<20?"lowN":""}">${n?`${w}–${l} · ${Math.round(w/n*100)}%`:"–"}</td>`;};
+  const kinds=[["fin","Final picks"],["bet","Model BET"],["cls","Classic top"]];
+  const cols=[["Q1",x=>x.qi===0],["Q2",x=>x.qi===1],["Q3",x=>x.qi===2],["Q4",x=>x.qi===3],["OVER",x=>x.dir==="OVER"],["UNDER",x=>x.dir==="UNDER"]];
+  $("breakdown").innerHTML=log.length?`<div class="bd"><h3>Win rate by quarter and by over / under</h3>
+    <div class="tbl"><table><thead><tr><th>Picks</th>${cols.map(c=>`<th>${c[0]}</th>`).join("")}</tr></thead><tbody>
+    ${kinds.map(k=>`<tr><td class="lbl">${k[1]}</td>${cols.map(c=>cell(x=>x.kind===k[0]&&c[1](x))).join("")}</tr>`).join("")}</tbody></table></div>
+    <div class="sub" style="margin-top:6px">Wins–losses · win %. Pushes not counted. Grey = fewer than 20 picks, too few to read anything into yet.</div></div>`:"";
   $("days").innerHTML=html||`<div class="empty">No graded nights yet. Results appear the morning after you save lines for a slate.</div>`;
 }
 
