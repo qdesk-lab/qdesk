@@ -139,7 +139,7 @@ summary{cursor:pointer;color:var(--muted);font-size:13px}
   <section id="v-how" hidden>
     <div class="how">
       <h2>How it works</h2>
-      <p>Every evening at about 9 p.m. (Lisbon/UK time) the site downloads the latest NBA quarter scores, posts tonight's games with two independent projections for every quarter and adds the latest injury news. At about 6 a.m. it checks the final scores and grades the night's picks; anything not final yet is graded at the 9 p.m. run.</p>
+      <p>Every day at about 4 p.m. (Lisbon/UK time) the site posts tonight's games with two independent projections for every quarter and the latest injury news, and refreshes them at about 7 p.m. for late injury updates. At about 6 a.m. and 8 a.m. it checks the final scores and grades the night's picks.</p>
       <ul>
         <li><b>Model:</b> each team's offence and defence per quarter (recent games count more, only 40% of a team's own quarter pattern is kept because most of it is noise). If you enter the full-game total, the four quarters are scaled to add up to it. A quarter is a <b>BET</b> when the model gives it at least 55% to beat the line.</li>
         <li><b>Classic:</b> Henry's original method, unchanged: 3 H2H games + 2 games against a common opponent + season average, SD score (most consistent = 4) plus mean score (furthest from the line = 4). The highest total is the top pick.</li>
@@ -223,14 +223,14 @@ function renderDates(){
 function renderToday(){
   renderDates();
   const s=state.slates[state.sel];
-  if(!s){ $("ticket").innerHTML=""; $("games").innerHTML=state.ready.s?`<div class="empty">No slate posted yet. Tonight's games are posted every evening at about 9 p.m. (Lisbon/UK time).</div>`:`<div class="empty">Loading tonight's games…</div>`; $("updated").textContent=""; return; }
+  if(!s){ $("ticket").innerHTML=""; $("games").innerHTML=state.ready.s?`<div class="empty">No slate posted yet. Tonight's games are posted every day at about 4 p.m. (Lisbon/UK time).</div>`:`<div class="empty">Loading tonight's games…</div>`; $("updated").textContent=""; return; }
   $("updated").textContent=`Posted ${lisbonStamp(s.updated)}`+($("updated").dataset.sync?` · picks synced ${lisbonStamp($("updated").dataset.sync)}`:"");
   const L=(state.lines[s.date]||{}).games||{};
   const R=(state.results[s.date]||{}).games||{};
   const fp=finalPicks(s.date);
   const anyLines=s.games.some(g=>L[g.key]&&(L[g.key].q||[]).some(v=>num(v)!==null));
   $("ticket").innerHTML=`<div class="ticket"><h2>Final picks</h2>
-    <div class="sub">${anyLines? `${fp.length} of ${s.games.length} games qualify · both methods must agree`:"Tonight's lines haven't been entered yet. Picks appear here once they are (usually by 10 p.m. Lisbon)."}</div>
+    <div class="sub">${anyLines? `${fp.length} of ${s.games.length} games qualify · both methods must agree`:"Tonight's lines haven't been entered yet. Picks appear here once they are entered (usually by early evening, Lisbon time)."}</div>
     ${fp.length?`<ol class="picks">${fp.map((x,k)=>{const res=grade(x.q.mDir,x.q.line,(R[x.g.key]||[])[x.q.i]);
       return `<li class="pick"><span class="n">${k+1}</span><div class="what">${esc(pickText(x.g,x.q))}<div class="why">Model ${r1(x.q.proj)} (${x.q.edge>0?"+":""}${r1(x.q.edge)}, ${Math.round(x.q.p*100)}%) · Classic ${r1(x.q.cmean)}${x.q.cTop?" · classic top pick":""}</div></div>
       ${res?`<span class="res ${res}">${res==="W"?"WON":res==="L"?"LOST":"PUSH"}</span>`:`<span class="tier t${x.q.tier}">${TIER[x.q.tier]}</span>`}</li>`}).join("")}</ol>
