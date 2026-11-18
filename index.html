@@ -54,6 +54,7 @@ select{padding:6px 10px}
 .t3{background:var(--accent);color:var(--accent-ink)}
 .t2{background:rgba(255,255,255,.85);color:#141a2a}
 .t1{background:transparent;border:1px solid currentColor;opacity:.85}
+.warn{display:inline-block;font-size:12px;font-weight:700;padding:1px 7px;border-radius:999px;background:#f3d1cc;color:#7a1d12;margin-left:6px;vertical-align:1px;white-space:nowrap}
 .core{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.04em;padding:1px 7px;border-radius:999px;background:#f5c542;color:#141a2a;margin-left:6px;vertical-align:1px;white-space:nowrap}
 :root[data-theme="dark"] .ticket .t2{color:#141a2a}
 .res{font-family:var(--f-display);font-weight:700;font-size:14px;padding:3px 9px;border-radius:999px}
@@ -144,7 +145,7 @@ summary{cursor:pointer;color:var(--muted);font-size:13px}
       <ul>
         <li><b>Model:</b> each team's offence and defence per quarter (recent games count more, only 40% of a team's own quarter pattern is kept because most of it is noise). If you enter the full-game total, the four quarters are scaled to add up to it. A quarter is a <b>BET</b> when the model gives it at least 55% to beat the line.</li>
         <li><b>Classic:</b> Henry's original method, unchanged: 3 H2H games + 2 games against a common opponent + season average, SD score (most consistent = 4) plus mean score (furthest from the line = 4). The highest total is the top pick.</li>
-        <li><b>Final picks:</b> one per game, only where both methods point the same way. <b>Strong</b> = model BET and classic's top pick. <b>Good</b> = model BET and classic agrees. <b>Lean</b> = both agree, smaller edge. <b>⭐ Core</b> = a final pick where the model is at least 1 point from the line; so far these have done much better than picks where the model sits on the line, so the Results page tracks them separately.</li>
+        <li><b>Final picks:</b> one per game, only where both methods point the same way. <b>Strong</b> = model BET and classic's top pick. <b>Good</b> = model BET and classic agrees. <b>Lean</b> = both agree, smaller edge. <b>⭐ Core</b> = a final pick where the model is at least 1 point from the line; so far these have done much better than picks where the model sits on the line, so the Results page tracks them separately. <b>⚠️</b> = one of the teams is newly missing players worth 15+ points a game (from the injury box); the model can't see that, and those picks have done much worse. <b>Best bets</b> = ⭐ Core picks without ⚠️.</li>
         <li><b>Injury impact:</b> points per game of injured players. <b>NEW absences</b> played in the team's last 5 games, so the model's ratings still count them: the real total may be lower than the model thinks. <b>Already out</b> players have been missing for a while, so the ratings already reflect it. The book's game total includes all of this.</li>
         <li><b>Skipped games:</b> if the model's own full-game total is 8+ points away from the book's total, the book knows something (injuries, rest) and the game is left out. Check the injury report before betting.</li>
       </ul>
@@ -209,6 +210,11 @@ const TIER=["","Lean","Good","Strong"];
 const CORE_EDGE=1.0; // core = final pick where the model is at least 1 point from the line (tracking rule from Nov 18)
 const isCore=q=>Math.abs(q.edge)>=CORE_EDGE;
 const coreTag=q=>isCore(q)?'<span class="core">⭐ Core</span>':"";
+const ABS_PPG=15; // warning = a team newly missing 15+ ppg (from the injury box); tracking rule from Nov 18
+const newAbs=(s,g)=>{const t=((s&&s.impact)||{})[g.key]||""; return Math.max(0,...[...t.matchAll(/NEW absences -([\d.]+)/g)].map(m=>+m[1]));};
+const isWarn=(s,g)=>newAbs(s,g)>=ABS_PPG;
+const warnTag=(s,g)=>isWarn(s,g)?`<span class="warn">⚠️ −${r1(newAbs(s,g))} ppg out</span>`:"";
+const isBest=(s,x)=>isCore(x.q)&&!isWarn(s,x.g);
 const pickText=(g,q)=>`${g.away} @ ${g.home} — Q${q.i+1} ${q.mDir} ${q.line}`;
 
 /* ---------- render: tonight ---------- */
@@ -234,14 +240,14 @@ function renderToday(){
   const fp=finalPicks(s.date);
   const anyLines=s.games.some(g=>L[g.key]&&(L[g.key].q||[]).some(v=>num(v)!==null));
   $("ticket").innerHTML=`<div class="ticket"><h2>Final picks</h2>
-    <div class="sub">${anyLines? `${fp.length} of ${s.games.length} games qualify · ${fp.filter(x=>isCore(x.q)).length} ⭐ Core (model 1+ pt from line) · both methods must agree`:"Tonight's lines haven't been entered yet. Picks appear here once they are entered (usually by early evening, Lisbon time)."}</div>
+    <div class="sub">${anyLines? `${fp.length} of ${s.games.length} games qualify · ${fp.filter(x=>isCore(x.q)).length} ⭐ Core (model 1+ pt from line) · ${fp.filter(x=>isBest(s,x)).length} best bets (⭐ without ⚠️) · both methods must agree`:"Tonight's lines haven't been entered yet. Picks appear here once they are entered (usually by early evening, Lisbon time)."}</div>
     ${fp.length?`<ol class="picks">${fp.map((x,k)=>{const res=grade(x.q.mDir,x.q.line,(R[x.g.key]||[])[x.q.i]);
-      return `<li class="pick"><span class="n">${k+1}</span><div class="what">${esc(pickText(x.g,x.q))}${coreTag(x.q)}<div class="why">Model ${r1(x.q.proj)} (${x.q.edge>0?"+":""}${r1(x.q.edge)}, ${Math.round(x.q.p*100)}%) · Classic ${r1(x.q.cmean)}${x.q.cTop?" · classic top pick":""}</div></div>
+      return `<li class="pick"><span class="n">${k+1}</span><div class="what">${esc(pickText(x.g,x.q))}${coreTag(x.q)}${warnTag(s,x.g)}<div class="why">Model ${r1(x.q.proj)} (${x.q.edge>0?"+":""}${r1(x.q.edge)}, ${Math.round(x.q.p*100)}%) · Classic ${r1(x.q.cmean)}${x.q.cTop?" · classic top pick":""}</div></div>
       ${res?`<span class="res ${res}">${res==="W"?"WON":res==="L"?"LOST":"PUSH"}</span>`:`<span class="tier t${x.q.tier}">${TIER[x.q.tier]}</span>`}</li>`}).join("")}</ol>
-      <button class="copy" id="copyBtn" type="button">Copy list</button> <button class="copy" id="copyCore" type="button">Copy ⭐ Core only</button>`:""}</div>`;
+      <button class="copy" id="copyBtn" type="button">Copy list</button> <button class="copy" id="copyCore" type="button">Copy best bets (⭐, no ⚠️)</button>`:""}</div>`;
   const copyL=(btn,list)=>{if(!btn)return; btn.onclick=()=>{const txt=list.map((x,k)=>`${k+1}. ${pickText(x.g,x.q)}${isCore(x.q)?" ⭐":""}`).join("\n");
     navigator.clipboard.writeText(txt||"No Core picks tonight").then(()=>btn.textContent="Copied").catch(()=>{btn.textContent="Select the list above to copy"});};};
-  copyL($("copyBtn"),fp); copyL($("copyCore"),fp.filter(x=>isCore(x.q)));
+  copyL($("copyBtn"),fp); copyL($("copyCore"),fp.filter(x=>isBest(s,x)));
   // keep anything typed but not yet saved when the page refreshes from the database
   const drafts={}; if(state.draftDate===s.date) document.querySelectorAll(".lines input").forEach(i=>drafts[i.id]=i.value);
   const focused=document.activeElement&&document.activeElement.id;
@@ -293,7 +299,7 @@ async function saveLines(date,key){
 /* ---------- render: results ---------- */
 function renderResults(){
   const dates=Object.keys(state.slates).sort().reverse();
-  const T={fin:[0,0,0,0],core:[0,0,0,0],bet:[0,0,0,0],cls:[0,0,0,0]}; // W,L,P,units
+  const T={fin:[0,0,0,0],core:[0,0,0,0],best:[0,0,0,0],bet:[0,0,0,0],cls:[0,0,0,0]}; // W,L,P,units
   const add=(arr,r)=>{ if(!r) return; arr[r==="W"?0:r==="L"?1:2]++; arr[3]+= r==="W"?0.909:r==="L"?-1:0; };
   const log=[]; const rec=(kind,qi,dir,r)=>{ if(r) log.push({kind,qi,dir,r}); };
   let html="";
@@ -305,15 +311,15 @@ function renderResults(){
       for(const x of a.qs){ if(x.line===null||!act) continue;
         if(x.verdict==="BET"){ const r=grade(x.mDir,x.line,act[x.i]); add(T.bet,r); rec("bet",x.i,x.mDir,r); }
         if(x.cTop){ const r=grade(x.cDir,x.line,act[x.i]); add(T.cls,r); rec("cls",x.i,x.cDir,r); } } }
-    const rows=fp.map(x=>{const act=(R[x.g.key]||[])[x.q.i]; const r=grade(x.q.mDir,x.q.line,act); add(T.fin,r); rec("fin",x.q.i,x.q.mDir,r); const c=isCore(x.q); if(c) add(T.core,r); rec(c?"core":"noncore",x.q.i,x.q.mDir,r);
-      return `<div class="row ${r||""}"><div class="what">${esc(pickText(x.g,x.q))} <span class="sub">· ${TIER[x.q.tier]}</span>${coreTag(x.q)}</div><span class="act">${act!==undefined?"actual "+act:"pending"}</span>${r?`<span class="res ${r}">${r==="W"?"WON":r==="L"?"LOST":"PUSH"}</span>`:"<span></span>"}</div>`}).join("");
+    const rows=fp.map(x=>{const act=(R[x.g.key]||[])[x.q.i]; const r=grade(x.q.mDir,x.q.line,act); add(T.fin,r); rec("fin",x.q.i,x.q.mDir,r); const c=isCore(x.q); if(c) add(T.core,r); rec(c?"core":"noncore",x.q.i,x.q.mDir,r); const wn=isWarn(s,x.g); if(c&&!wn){add(T.best,r); rec("best",x.q.i,x.q.mDir,r);} if(wn) rec("warn",x.q.i,x.q.mDir,r);
+      return `<div class="row ${r||""}"><div class="what">${esc(pickText(x.g,x.q))} <span class="sub">· ${TIER[x.q.tier]}</span>${coreTag(x.q)}${warnTag(s,x.g)}</div><span class="act">${act!==undefined?"actual "+act:"pending"}</span>${r?`<span class="res ${r}">${r==="W"?"WON":r==="L"?"LOST":"PUSH"}</span>`:"<span></span>"}</div>`}).join("");
     html+=`<div class="day"><h3>${slateLabel(d,true)}</h3><div class="rows">${rows||'<div class="sub">No game qualified.</div>'}</div></div>`;
   }
   const tile=(k,a,s)=>{const n=a[0]+a[1]; return `<div class="tile"><div class="k">${k}</div><div class="v">${a[0]}–${a[1]}${a[2]?"–"+a[2]:""}</div><div class="s">${n?Math.round(a[0]/n*1000)/10+"% · ":""}${a[3]>=0?"+":""}${a[3].toFixed(2)} units at −110 · ${s}</div></div>`};
-  $("tiles").innerHTML=tile("Final picks",T.fin,"one per game")+tile("⭐ Core picks",T.core,"final picks, model 1+ pt from line")+tile("Model BET picks",T.bet,"every quarter rated BET")+tile("Classic top picks",T.cls,"top total per game")+`<div class="tile"><div class="k">Break-even</div><div class="v">52.4%</div><div class="s">needed at −110 odds. Judge after 150+ picks.</div></div>`;
+  $("tiles").innerHTML=tile("Final picks",T.fin,"one per game")+tile("⭐ Core picks",T.core,"final picks, model 1+ pt from line")+tile("Best bets",T.best,"⭐ Core without ⚠️ big absences")+tile("Model BET picks",T.bet,"every quarter rated BET")+tile("Classic top picks",T.cls,"top total per game")+`<div class="tile"><div class="k">Break-even</div><div class="v">52.4%</div><div class="s">needed at −110 odds. Judge after 150+ picks.</div></div>`;
   const cell=(f)=>{const a=log.filter(f); const w=a.filter(x=>x.r==="W").length, l=a.filter(x=>x.r==="L").length, n=w+l;
     return `<td class="${n<20?"lowN":""}">${n?`${w}–${l} · ${Math.round(w/n*100)}%`:"–"}</td>`;};
-  const kinds=[["fin","Final picks"],["core","⭐ Core finals"],["noncore","Non-core finals"],["bet","Model BET"],["cls","Classic top"]];
+  const kinds=[["fin","Final picks"],["core","⭐ Core finals"],["noncore","Non-core finals"],["best","Best bets (⭐, no ⚠️)"],["warn","⚠️ Finals with big absences"],["bet","Model BET"],["cls","Classic top"]];
   const cols=[["All",x=>true],["Q1",x=>x.qi===0],["Q2",x=>x.qi===1],["Q3",x=>x.qi===2],["Q4",x=>x.qi===3],["OVER",x=>x.dir==="OVER"],["UNDER",x=>x.dir==="UNDER"]];
   $("breakdown").innerHTML=log.length?`<div class="bd"><h3>Win rate by quarter and by over / under</h3>
     <div class="tbl"><table><thead><tr><th>Picks</th>${cols.map(c=>`<th>${c[0]}</th>`).join("")}</tr></thead><tbody>
