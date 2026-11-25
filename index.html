@@ -55,6 +55,7 @@ select{padding:6px 10px}
 .t2{background:rgba(255,255,255,.85);color:#141a2a}
 .t1{background:transparent;border:1px solid currentColor;opacity:.85}
 .warn{display:inline-block;font-size:12px;font-weight:700;padding:1px 7px;border-radius:999px;background:#f3d1cc;color:#7a1d12;margin-left:6px;vertical-align:1px;white-space:nowrap}
+.acc{display:inline-block;font:600 12px/1 ui-monospace,monospace;padding:4px 6px;border-radius:6px;margin:2px;background:var(--line,#ccc)}.acc.W{background:#2f9e5b;color:#fff}.acc.L{background:#c8443a;color:#fff}.strip{margin-top:10px;line-height:2}.pos{color:#2f9e5b;font-weight:600}.neg{color:#c8443a;font-weight:600}
 .core{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.04em;padding:1px 7px;border-radius:999px;background:#f5c542;color:#141a2a;margin-left:6px;vertical-align:1px;white-space:nowrap}
 :root[data-theme="dark"] .ticket .t2{color:#141a2a}
 .res{font-family:var(--f-display);font-weight:700;font-size:14px;padding:3px 9px;border-radius:999px}
@@ -136,6 +137,7 @@ summary{cursor:pointer;color:var(--muted);font-size:13px}
     <div class="bar"><h2>Track record</h2><span class="sub">Graded automatically from about 6 a.m. the morning after (Lisbon/UK time).</span></div>
     <div class="tiles" id="tiles"></div>
     <div id="breakdown"></div>
+    <div id="accum"></div>
     <div id="days"></div>
   </section>
   <section id="v-how" hidden>
@@ -302,17 +304,19 @@ function renderResults(){
   const T={fin:[0,0,0,0],core:[0,0,0,0],best:[0,0,0,0],bet:[0,0,0,0],cls:[0,0,0,0]}; // W,L,P,units
   const add=(arr,r)=>{ if(!r) return; arr[r==="W"?0:r==="L"?1:2]++; arr[3]+= r==="W"?0.909:r==="L"?-1:0; };
   const log=[]; const rec=(kind,qi,dir,r)=>{ if(r) log.push({kind,qi,dir,r}); };
+  const nights=[]; // per night: results per group, for the accumulator view
   let html="";
   for(const d of dates){
     const s=state.slates[d], L=(state.lines[d]||{}).games||{}, R=(state.results[d]||{}).games||{};
     if(!Object.keys(L).length) continue;
-    const fp=finalPicks(d);
+    const fp=finalPicks(d); const N={fin:[],core:[],best:[],bet:[],cls:[]};
     for(const g of s.games){ const a=analyse(g,L[g.key]); const act=R[g.key];
       for(const x of a.qs){ if(x.line===null||!act) continue;
-        if(x.verdict==="BET"){ const r=grade(x.mDir,x.line,act[x.i]); add(T.bet,r); rec("bet",x.i,x.mDir,r); }
-        if(x.cTop){ const r=grade(x.cDir,x.line,act[x.i]); add(T.cls,r); rec("cls",x.i,x.cDir,r); } } }
-    const rows=fp.map(x=>{const act=(R[x.g.key]||[])[x.q.i]; const r=grade(x.q.mDir,x.q.line,act); add(T.fin,r); rec("fin",x.q.i,x.q.mDir,r); const c=isCore(x.q); if(c) add(T.core,r); rec(c?"core":"noncore",x.q.i,x.q.mDir,r); const wn=isWarn(s,x.g); if(c&&!wn){add(T.best,r); rec("best",x.q.i,x.q.mDir,r);} if(wn) rec("warn",x.q.i,x.q.mDir,r);
+        if(x.verdict==="BET"){ const r=grade(x.mDir,x.line,act[x.i]); add(T.bet,r); rec("bet",x.i,x.mDir,r); N.bet.push(r); }
+        if(x.cTop){ const r=grade(x.cDir,x.line,act[x.i]); add(T.cls,r); rec("cls",x.i,x.cDir,r); N.cls.push(r); } } }
+    const rows=fp.map(x=>{const act=(R[x.g.key]||[])[x.q.i]; const r=grade(x.q.mDir,x.q.line,act); add(T.fin,r); rec("fin",x.q.i,x.q.mDir,r); N.fin.push(r); const c=isCore(x.q); if(c){ add(T.core,r); N.core.push(r); } rec(c?"core":"noncore",x.q.i,x.q.mDir,r); const wn=isWarn(s,x.g); if(c&&!wn){add(T.best,r); rec("best",x.q.i,x.q.mDir,r); N.best.push(r);} if(wn) rec("warn",x.q.i,x.q.mDir,r);
       return `<div class="row ${r||""}"><div class="what">${esc(pickText(x.g,x.q))} <span class="sub">· ${TIER[x.q.tier]}</span>${coreTag(x.q)}${warnTag(s,x.g)}</div><span class="act">${act!==undefined?"actual "+act:"pending"}</span>${r?`<span class="res ${r}">${r==="W"?"WON":r==="L"?"LOST":"PUSH"}</span>`:"<span></span>"}</div>`}).join("");
+    nights.push({d,N});
     html+=`<div class="day"><h3>${slateLabel(d,true)}</h3><div class="rows">${rows||'<div class="sub">No game qualified.</div>'}</div></div>`;
   }
   const tile=(k,a,s)=>{const n=a[0]+a[1]; return `<div class="tile"><div class="k">${k}</div><div class="v">${a[0]}–${a[1]}${a[2]?"–"+a[2]:""}</div><div class="s">${n?Math.round(a[0]/n*1000)/10+"% · ":""}${a[3]>=0?"+":""}${a[3].toFixed(2)} units at −110 · ${s}</div></div>`};
@@ -325,7 +329,33 @@ function renderResults(){
     <div class="tbl"><table><thead><tr><th>Picks</th>${cols.map(c=>`<th>${c[0]}</th>`).join("")}</tr></thead><tbody>
     ${kinds.map(k=>`<tr><td class="lbl">${k[1]}</td>${cols.map(c=>cell(x=>x.kind===k[0]&&c[1](x))).join("")}</tr>`).join("")}</tbody></table></div>
     <div class="sub" style="margin-top:6px">Wins–losses · win %. Pushes not counted. Grey = fewer than 20 picks, too few to read anything into yet.</div></div>`:"";
+  $("accum").innerHTML=accumHTML(nights);
   $("days").innerHTML=html||`<div class="empty">No graded nights yet. Results appear the morning after you save lines for a slate.</div>`;
+}
+
+/* ---------- accumulator analysis ---------- */
+const LEG_ODDS=1.85; // typical SportyBet quarter odds
+function accumHTML(nights){
+  const groups=[["best","Best bets (⭐, no ⚠️)"],["core","⭐ Core finals"],["fin","All final picks"],["bet","Model BET"],["cls","Classic top"]];
+  const done=nights.filter(n=>Object.values(n.N).every(a=>a.every(r=>r))).sort((a,b)=>a.d<b.d?-1:1); // fully graded nights, oldest first
+  const stat=k=>{ let nw=0,nl=0,acc=0,sw=0,sl=0,sing=0,singN=0,legs=0,np=0,best=0,run=0,maxDD=0,dbl=0; const strip=[];
+    for(const n of done){ const a=n.N[k]; if(!a.length) continue; np++; legs+=a.length;
+      const W=a.filter(r=>r==="W").length, L=a.filter(r=>r==="L").length, live=W+L;
+      sw+=W; sl+=L; sing+=W*(LEG_ODDS-1)-L; if(live) singN+=(W*(LEG_ODDS-1)-L)/live;
+      const won=L===0&&live>0; const pr=won?Math.pow(LEG_ODDS,live)-1:(live?-1:0);
+      if(won) nw++; else if(live) nl++; acc+=pr; run+=pr; best=Math.max(best,run); maxDD=Math.min(maxDD,run-best);
+      // all doubles: every pair of tonight's picks, 1 unit total spread across the pairs
+      if(live>=2){ const pairs=live*(live-1)/2, wp=W*(W-1)/2; dbl+= (wp*Math.pow(LEG_ODDS,2))/pairs-1; } else if(live===1){ dbl+= W? LEG_ODDS-1:-1; }
+      strip.push(`<span class="acc ${won?"W":live?"L":""}" title="${n.d}: ${W} of ${live} won">${W}/${live}</span>`); }
+    return {np,nw,nl,acc,sw,sl,sing,singN,legs,maxDD,dbl,strip}; };
+  const rows=groups.map(([k,l])=>{const x=stat(k); if(!x.np) return "";
+    const f=v=>`<span class="${v>=0?"pos":"neg"}">${v>=0?"+":""}${v.toFixed(1)}</span>`;
+    return `<tr><td class="lbl">${l}</td><td>${x.np}</td><td>${(x.legs/x.np).toFixed(1)}</td><td>${x.nw}–${x.nl} · ${Math.round(x.nw/Math.max(1,x.nw+x.nl)*100)}%</td><td>${f(x.acc)}</td><td>${f(x.dbl)}</td><td>${x.sw}–${x.sl} · ${f(x.singN)}</td></tr>`;}).join("");
+  const b=stat("best");
+  return done.length?`<div class="bd"><h3>Accumulator analysis: one slip per night</h3>
+    <div class="tbl"><table><thead><tr><th>Picks</th><th>Nights</th><th>Avg legs</th><th>Accumulator won</th><th>Acca profit</th><th>All doubles profit</th><th>Singles</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="sub" style="margin-top:6px">Each column stakes <b>1 unit per night</b> so they compare fairly. <b>Accumulator</b>: all of that night's picks on one slip (wins only if every pick wins; a push drops that leg). <b>All doubles</b>: the same 1 unit split evenly across every pair of that night's picks (one pick = a single). <b>Singles</b>: the 1 unit split evenly across that night's picks. Profit in units, at ${LEG_ODDS} odds per pick.</div>
+    ${b.np?`<div class="strip"><span class="sub">Best-bet slip by night (picks won / picks):</span> ${b.strip.join(" ")}</div>`:""}</div>`:"";
 }
 
 /* ---------- routing & data ---------- */
