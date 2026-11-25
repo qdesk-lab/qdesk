@@ -55,6 +55,7 @@ select{padding:6px 10px}
 .t2{background:rgba(255,255,255,.85);color:#141a2a}
 .t1{background:transparent;border:1px solid currentColor;opacity:.85}
 .warn{display:inline-block;font-size:12px;font-weight:700;padding:1px 7px;border-radius:999px;background:#f3d1cc;color:#7a1d12;margin-left:6px;vertical-align:1px;white-space:nowrap}
+.plan{margin-top:12px;padding:10px 12px;border:1px solid currentColor;border-radius:10px;opacity:.95}.plan .k{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px}.plan .sub{margin-top:4px}
 .acc{display:inline-block;font:600 12px/1 ui-monospace,monospace;padding:4px 6px;border-radius:6px;margin:2px;background:var(--line,#ccc)}.acc.W{background:#2f9e5b;color:#fff}.acc.L{background:#c8443a;color:#fff}.strip{margin-top:10px;line-height:2}.pos{color:#2f9e5b;font-weight:600}.neg{color:#c8443a;font-weight:600}
 .core{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.04em;padding:1px 7px;border-radius:999px;background:#f5c542;color:#141a2a;margin-left:6px;vertical-align:1px;white-space:nowrap}
 :root[data-theme="dark"] .ticket .t2{color:#141a2a}
@@ -148,6 +149,7 @@ summary{cursor:pointer;color:var(--muted);font-size:13px}
         <li><b>Model:</b> each team's offence and defence per quarter (recent games count more, only 40% of a team's own quarter pattern is kept because most of it is noise). If you enter the full-game total, the four quarters are scaled to add up to it. A quarter is a <b>BET</b> when the model gives it at least 55% to beat the line.</li>
         <li><b>Classic:</b> Henry's original method, unchanged: 3 H2H games + 2 games against a common opponent + season average, SD score (most consistent = 4) plus mean score (furthest from the line = 4). The highest total is the top pick.</li>
         <li><b>Final picks:</b> one per game, only where both methods point the same way. <b>Strong</b> = model BET and classic's top pick. <b>Good</b> = model BET and classic agrees. <b>Lean</b> = both agree, smaller edge. <b>⭐ Core</b> = a final pick where the model is at least 1 point from the line; so far these have done much better than picks where the model sits on the line, so the Results page tracks them separately. <b>⚠️</b> = one of the teams is newly missing players worth 15+ points a game (from the injury box); the model can't see that, and those picks have done much worse. <b>Best bets</b> = ⭐ Core picks without ⚠️.</li>
+        <li><b>How to stake:</b> bet only the best bets. 1 unit = 2% of your bankroll, recalculated weekly. <b>1 best bet</b> → a single (2 units). <b>2</b> → one double (2 units). <b>3 or 4</b> → a <b>System 2/3 or 2/4</b> bet, which places every possible double (3 or 6 of them), 3 units in total, plus, if you like, the full accumulator for ¼ of the stake. Doubles pay about 3.4 odds; with 3 or 4 picks you still make a profit when one pick loses (and break even or lose a little when two of four lose), whereas one accumulator loses everything on any miss. Same stake after a loss; stop and review if the bankroll falls 30%. The Results page's accumulator table compares singles, doubles and accumulators on the real picks.</li>
         <li><b>Injury impact:</b> points per game of injured players. <b>NEW absences</b> played in the team's last 5 games, so the model's ratings still count them: the real total may be lower than the model thinks. <b>Already out</b> players have been missing for a while, so the ratings already reflect it. The book's game total includes all of this.</li>
         <li><b>Skipped games:</b> if the model's own full-game total is 8+ points away from the book's total, the book knows something (injuries, rest) and the game is left out. Check the injury report before betting.</li>
       </ul>
@@ -246,7 +248,8 @@ function renderToday(){
     ${fp.length?`<ol class="picks">${fp.map((x,k)=>{const res=grade(x.q.mDir,x.q.line,(R[x.g.key]||[])[x.q.i]);
       return `<li class="pick"><span class="n">${k+1}</span><div class="what">${esc(pickText(x.g,x.q))}${coreTag(x.q)}${warnTag(s,x.g)}<div class="why">Model ${r1(x.q.proj)} (${x.q.edge>0?"+":""}${r1(x.q.edge)}, ${Math.round(x.q.p*100)}%) · Classic ${r1(x.q.cmean)}${x.q.cTop?" · classic top pick":""}</div></div>
       ${res?`<span class="res ${res}">${res==="W"?"WON":res==="L"?"LOST":"PUSH"}</span>`:`<span class="tier t${x.q.tier}">${TIER[x.q.tier]}</span>`}</li>`}).join("")}</ol>
-      <button class="copy" id="copyBtn" type="button">Copy list</button> <button class="copy" id="copyCore" type="button">Copy best bets (⭐, no ⚠️)</button>`:""}</div>`;
+      <button class="copy" id="copyBtn" type="button">Copy list</button> <button class="copy" id="copyCore" type="button">Copy best bets (⭐, no ⚠️)</button>`:""}
+    ${anyLines?stakePlan(fp.filter(x=>isBest(s,x)).length):""}</div>`;
   const copyL=(btn,list)=>{if(!btn)return; btn.onclick=()=>{const txt=list.map((x,k)=>`${k+1}. ${pickText(x.g,x.q)}${isCore(x.q)?" ⭐":""}`).join("\n");
     navigator.clipboard.writeText(txt||"No Core picks tonight").then(()=>btn.textContent="Copied").catch(()=>{btn.textContent="Select the list above to copy"});};};
   copyL($("copyBtn"),fp); copyL($("copyCore"),fp.filter(x=>isBest(s,x)));
@@ -331,6 +334,17 @@ function renderResults(){
     <div class="sub" style="margin-top:6px">Wins–losses · win %. Pushes not counted. Grey = fewer than 20 picks, too few to read anything into yet.</div></div>`:"";
   $("accum").innerHTML=accumHTML(nights);
   $("days").innerHTML=html||`<div class="empty">No graded nights yet. Results appear the morning after you save lines for a slate.</div>`;
+}
+
+/* ---------- staking plan (recommendation from Nov 25) ---------- */
+function stakePlan(n){
+  const pr=n===0?"<b>No best bets tonight.</b> Skip, or a token stake only."
+   :n===1?"<b>1 best bet → a single.</b> Stake 2 units."
+   :n===2?"<b>2 best bets → one double.</b> Stake 2 units."
+   :n===3?"<b>3 best bets → System 2/3</b> (3 doubles). Stake 3 units in total (1 per double). Optional: a 3-pick accumulator on top for ¾ unit (¼ of the stake)."
+   :`<b>${n} best bets → System 2/${n}</b> (${n*(n-1)/2} doubles). Stake 3 units in total, split evenly across the doubles. Optional: the full ${n}-pick accumulator on top for ¾ unit (¼ of the stake).`;
+  return `<div class="plan"><div class="k">How to stake tonight</div><div>${pr}</div>
+    <div class="sub">1 unit = 2% of your bankroll (recalculate weekly). Best bets only. With 3+ picks, use SportyBet's System tab. Same stake after a loss; never chase. Stop and review if the bankroll falls 30%.</div></div>`;
 }
 
 /* ---------- accumulator analysis ---------- */
